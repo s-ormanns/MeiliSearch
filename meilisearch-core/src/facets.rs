@@ -245,7 +245,7 @@ mod test {
 
     #[test]
     fn test_facet_key() {
-        let mut schema = Schema::new();
+        let mut schema = Schema::default();
         let id = schema.insert_with_position("hello").unwrap().0;
         let facet_list = [schema.id("hello").unwrap()];
         assert_eq!(
@@ -286,7 +286,7 @@ mod test {
     #[test]
     fn test_parse_facet_array() {
         use either::Either::{Left, Right};
-        let mut schema = Schema::new();
+        let mut schema = Schema::default();
         let _id = schema.insert_with_position("hello").unwrap();
         let facet_list = [schema.id("hello").unwrap()];
         assert_eq!(

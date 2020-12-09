@@ -127,12 +127,12 @@ where A: AsRef<[u8]>,
     documents_fields.put_document_field(writer, document_id, field_id, &serialized)?;
 
     if let Some(indexed_pos) = schema.get_position(field_id) {
-        let number_of_words = index_value(indexer, document_id, *indexed_pos, value);
+        let number_of_words = index_value(indexer, document_id, indexed_pos, value);
         if let Some(number_of_words) = number_of_words {
             documents_fields_counts.put_document_field_count(
                 writer,
                 document_id,
-                *indexed_pos,
+                indexed_pos,
                 number_of_words as u16,
             )?;
         }
