@@ -120,7 +120,7 @@ impl SearchQuery {
             search_builder.limit(limit);
         }
 
-        let available_attributes = schema.displayed_name();
+        let available_attributes = schema.displayed_names();
         let mut restricted_attributes: HashSet<&str>;
         match &self.attributes_to_retrieve {
             Some(attributes_to_retrieve) => {

@@ -12,11 +12,11 @@ enum OptionAll<T> {
 
 impl<T> OptionAll<T> {
     // replace the value with None and return the previous value
-    fn take(&mut self) -> OptionAll<T> {
+    pub(crate) fn take(&mut self) -> OptionAll<T> {
         std::mem::replace(self, OptionAll::None)
     }
 
-    fn map<U, F: FnOnce(T) -> U>(self, f: F) -> OptionAll<U> {
+    pub(crate) fn map<U, F: FnOnce(T) -> U>(self, f: F) -> OptionAll<U> {
         match self {
             OptionAll::Some(x) => OptionAll::Some(f(x)),
             OptionAll::All => OptionAll::All,
@@ -24,7 +24,7 @@ impl<T> OptionAll<T> {
         }
     }
 
-    pub fn is_all(&self) -> bool {
+    pub(crate) fn is_all(&self) -> bool {
         matches!(self, OptionAll::All)
     }
 }
@@ -43,8 +43,8 @@ pub struct Schema {
     ranked: HashSet<FieldId>,
     displayed: OptionAll<HashSet<FieldId>>,
 
-    indexed: OptionAll<Vec<FieldId>>,
-    indexed_map: HashMap<FieldId, IndexedPos>,
+    searchable: OptionAll<Vec<FieldId>>,
+    indexed_position: HashMap<FieldId, IndexedPos>,
 }
 
 impl Schema {
@@ -57,18 +57,18 @@ impl Schema {
         let field_id = fields_map.insert(name).unwrap();
 
         let mut displayed = HashSet::new();
-        let mut indexed_map = HashMap::new();
+        let mut indexed_position = HashMap::new();
 
         displayed.insert(field_id);
-        indexed_map.insert(field_id, 0.into());
+        indexed_position.insert(field_id, 0.into());
 
         Schema {
             fields_map,
             primary_key: Some(field_id),
             ranked: HashSet::new(),
             displayed: OptionAll::All,
-            indexed: OptionAll::All,
-            indexed_map,
+            searchable: OptionAll::All,
+            indexed_position,
         }
     }
 
@@ -101,35 +101,33 @@ impl Schema {
         self.fields_map.iter().map(|(k, _)| k.as_ref())
     }
 
-    pub fn contains(&self, name: &str) -> bool {
-        self.fields_map.id(name).is_some()
-    }
-
+    /// add `name` to the list of known fields
     pub fn insert(&mut self, name: &str) -> SResult<FieldId> {
         self.fields_map.insert(name)
     }
 
-    pub fn insert_and_index(&mut self, name: &str) -> SResult<FieldId> {
-        match self.fields_map.id(name) {
-            Some(id) => {
-                Ok(id)
-            }
-            None => {
-                self.set_indexed(name)?;
-                self.set_displayed(name)
-            }
-        }
+
+    /// Adds `name` to the list of known fields, and in the last position of the indexed_position map. This
+    /// field is taken into acccount when `searchableAttribute` or `displayedAttributes` is set to `"*"`
+    pub fn insert_with_position(&mut self, name: &str) -> SResult<(FieldId, IndexedPos)> {
+        let field_id = self.fields_map.insert(name)?;
+        let position = self.indexed_position.len() as u16;
+        let previous = self.insert_position(field_id, position.into());
+        debug_assert!(previous.is_none());
+        Ok((field_id, position.into()))
+    }
+
+    /// insert a field `field_id` at `position` in the `indexed_position` map, and return the
+    /// previous value if there was one.
+    fn insert_position(&mut self, field_id: FieldId, position: IndexedPos) -> Option<IndexedPos> {
+        self.indexed_position.insert(field_id, position)
     }
 
     pub fn ranked(&self) -> &HashSet<FieldId> {
         &self.ranked
     }
 
-    pub fn ranked_name(&self) -> HashSet<&str> {
-        self.ranked.iter().filter_map(|a| self.name(*a)).collect()
-    }
-
-    pub fn displayed(&self) -> Cow<HashSet<FieldId>> {
+    fn displayed(&self) -> Cow<HashSet<FieldId>> {
         match self.displayed {
             OptionAll::Some(ref v) => Cow::Borrowed(v),
             OptionAll::All => {
@@ -137,7 +135,7 @@ impl Schema {
                     .fields_map
                     .iter()
                     .map(|(_, &v)| v)
-                    .collect::<HashSet<_>>();
+                    .collect();
                 Cow::Owned(fields)
             }
             OptionAll::None => Cow::Owned(HashSet::new())
@@ -148,22 +146,18 @@ impl Schema {
         self.displayed.is_all()
     }
 
-    pub fn displayed_name(&self) -> HashSet<&str> {
-        match self.displayed {
-            OptionAll::All => self.fields_map.iter().filter_map(|(_, &v)| self.name(v)).collect(),
-            OptionAll::Some(ref v) => v.iter().filter_map(|a| self.name(*a)).collect(),
-            OptionAll::None => HashSet::new(),
-        }
+    pub fn displayed_names(&self) -> HashSet<&str> {
+        self.displayed().iter().filter_map(|&f| self.name(f)).collect()
     }
 
-    pub fn indexed(&self) -> Cow<[FieldId]> {
-        match self.indexed {
+    fn searchable_attributes(&self) -> Cow<[FieldId]> {
+        match self.searchable {
             OptionAll::Some(ref v) => Cow::Borrowed(v),
             OptionAll::All => {
                 let fields = self
-                    .fields_map
+                    .indexed_position
                     .iter()
-                    .map(|(_, &f)| f)
+                    .map(|(&f, _)| f)
                     .collect();
                 Cow::Owned(fields)
             },
@@ -171,17 +165,21 @@ impl Schema {
         }
     }
 
-    pub fn indexed_name(&self) -> Vec<&str> {
-        self.indexed().iter().filter_map(|a| self.name(*a)).collect()
+    pub fn searchable_attributes_str(&self) -> Vec<&str> {
+        self
+            .searchable_attributes()
+            .iter()
+            .filter_map(|a| self.name(*a))
+            .collect()
     }
 
-    pub fn set_ranked(&mut self, name: &str) -> SResult<FieldId> {
+    pub(crate) fn set_ranked(&mut self, name: &str) -> SResult<FieldId> {
         let id = self.fields_map.insert(name)?;
         self.ranked.insert(id);
         Ok(id)
     }
 
-    pub fn set_displayed(&mut self, name: &str) -> SResult<FieldId> {
+    pub(crate) fn set_displayed(&mut self, name: &str) -> SResult<FieldId> {
         let id = self.fields_map.insert(name)?;
         self.displayed = match self.displayed.take() {
             OptionAll::All => OptionAll::All,
@@ -198,15 +196,15 @@ impl Schema {
         Ok(id)
     }
 
-    pub fn set_indexed(&mut self, name: &str) -> SResult<(FieldId, IndexedPos)> {
+    pub(crate) fn set_indexed(&mut self, name: &str) -> SResult<(FieldId, IndexedPos)> {
         let id = self.fields_map.insert(name)?;
-
-        if let Some(indexed_pos) = self.indexed_map.get(&id) {
+        if let Some(indexed_pos) = self.indexed_position.get(&id) {
             return Ok((id, *indexed_pos))
         };
-        let pos = self.indexed_map.len() as u16;
-        self.indexed_map.insert(id, pos.into());
-        self.indexed = self.indexed.take().map(|mut v| {
+        let pos = self.indexed_position.len() as u16;
+        let value = self.insert_position(id, pos.into());
+        debug_assert!(value.is_none());
+        self.searchable = self.searchable.take().map(|mut v| {
             v.push(id);
             v
         });
@@ -215,56 +213,6 @@ impl Schema {
 
     pub fn clear_ranked(&mut self) {
         self.ranked.clear();
-    }
-
-    pub fn remove_ranked(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name) {
-            self.ranked.remove(&id);
-        }
-    }
-
-    /// remove field from displayed attributes. If diplayed attributes is OptionAll::All,
-    /// dipslayed attributes is turned into OptionAll::Some(v) where v is all displayed attributes
-    /// except name.
-    pub fn remove_displayed(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name) {
-            self.displayed = match self.displayed.take() {
-                OptionAll::Some(mut v) => {
-                    v.remove(&id);
-                    OptionAll::Some(v)
-                }
-                OptionAll::All => {
-                    let displayed = self.fields_map
-                        .iter()
-                        .filter_map(|(key, &value)| {
-                            if key != name {
-                                Some(value)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<HashSet<_>>();
-                    OptionAll::Some(displayed)
-                }
-                OptionAll::None => OptionAll::None,
-            };
-        }
-    }
-
-    pub fn remove_indexed(&mut self, name: &str) {
-        if let Some(id) = self.fields_map.id(name) {
-            self.indexed_map.remove(&id);
-            self.indexed = match self.indexed.take() {
-                // valid because indexed is All and indexed() return the content of
-                // indexed_map that is already updated
-                OptionAll::All => OptionAll::Some(self.indexed().into_owned()),
-                OptionAll::Some(mut v) => {
-                    v.retain(|x| *x != id);
-                    OptionAll::Some(v)
-                }
-                OptionAll::None => OptionAll::None,
-            }
-        }
     }
 
     pub fn is_ranked(&self, id: FieldId) -> bool {
@@ -279,18 +227,18 @@ impl Schema {
         }
     }
 
-    pub fn is_indexed(&self, id: FieldId) -> Option<&IndexedPos> {
-        self.indexed_map.get(&id)
+    pub fn get_position(&self, id: FieldId) -> Option<&IndexedPos> {
+        self.indexed_position.get(&id)
     }
 
-    pub fn is_indexed_all(&self) -> bool {
-        self.indexed.is_all()
+    pub fn is_searchable_all(&self) -> bool {
+        self.searchable.is_all()
     }
 
     pub fn indexed_pos_to_field_id<I: Into<IndexedPos>>(&self, pos: I) -> Option<FieldId> {
         let indexed_pos = pos.into().0;
         self
-            .indexed_map
+            .indexed_position
             .iter()
             .find(|(_, &v)| v.0 == indexed_pos)
             .map(|(&k, _)| k)
@@ -319,14 +267,14 @@ impl Schema {
     }
 
     pub fn update_indexed<S: AsRef<str>>(&mut self, data: Vec<S>) -> SResult<()> {
-        self.indexed = match self.indexed.take() {
+        self.searchable = match self.searchable.take() {
             OptionAll::Some(mut v) => {
                 v.clear();
                 OptionAll::Some(v)
             },
             _ => OptionAll::Some(Vec::new()),
         };
-        self.indexed_map.clear();
+        self.indexed_position.clear();
         for name in data {
             self.set_indexed(name.as_ref())?;
         }
@@ -334,13 +282,7 @@ impl Schema {
     }
 
     pub fn set_all_fields_as_indexed(&mut self) {
-        self.indexed = OptionAll::All;
-        self.indexed_map.clear();
-
-        for (_name, id) in self.fields_map.iter() {
-            let pos = self.indexed_map.len() as u16;
-            self.indexed_map.insert(*id, pos.into());
-        }
+        self.searchable = OptionAll::All;
     }
 
     pub fn set_all_fields_as_displayed(&mut self) {
