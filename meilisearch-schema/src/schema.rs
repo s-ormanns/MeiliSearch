@@ -258,3 +258,71 @@ impl Schema {
         self.displayed = OptionAll::All
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use k9::*;
+
+    #[test]
+    fn test_with_primary_key() {
+        let schema = Schema::with_primary_key("test");
+        assert_matches_snapshot!(format!("{:?}", schema));
+    }
+
+    #[test]
+    fn primary_key() {
+        let schema = Schema::with_primary_key("test");
+        assert_eq!(schema.primary_key(), Some("test"));
+    }
+
+    #[test]
+    fn insert_last() {
+        let mut schema = Schema::default();
+        assert_eq!(schema.insert_position_last(1.into()), IndexedPos(0));
+        assert_eq!(schema.insert_position_last(2.into()), IndexedPos(1));
+    }
+
+    #[test]
+    fn test_insert_with_position_base() {
+        let mut schema = Schema::default();
+        let (id, position) = schema.insert_with_position("foo").unwrap();
+        assert!(schema.searchable.is_all());
+        assert!(schema.displayed.is_all());
+        assert_eq!(id, 0.into());
+        assert_eq!(position, 0.into());
+        let (id, position) = schema.insert_with_position("bar").unwrap();
+        assert_eq!(id, 1.into());
+        assert_eq!(position, 1.into());
+    }
+
+    #[test]
+    fn test_insert_with_position_primary_key() {
+        let mut schema = Schema::with_primary_key("test");
+        let (id, position) = schema.insert_with_position("foo").unwrap();
+        assert!(schema.searchable.is_all());
+        assert!(schema.displayed.is_all());
+        assert_eq!(id, 1.into());
+        assert_eq!(position, 0.into());
+        let (id, position) = schema.insert_with_position("test").unwrap();
+        assert_eq!(id, 0.into());
+        assert_eq!(position, 1.into());
+    }
+
+    #[test]
+    fn test_insert_with_position_non_all_searchable_attributes() {
+    }
+
+    #[test]
+    fn test_insert() {
+        let mut schema = Schema::default();
+        let field_id = schema.insert("foo").unwrap();
+        assert!(schema.fields_map.name(field_id).is_some());
+        assert!(schema.searchable.is_all());
+        assert!(schema.displayed.is_all());
+    }
+
+    #[test]
+    fn test_set_searchable() {
+    }
+}
