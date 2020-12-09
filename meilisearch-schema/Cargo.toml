@@ -11,3 +11,7 @@ meilisearch-error = { path = "../meilisearch-error", version = "0.17.0" }
 serde = { version = "1.0.117", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["preserve_order"] }
 zerocopy = "0.3.0"
+
+[dev-dependencies]
+k9 = "0.5.2"
+#k9 = { path = "../../k9/k9" }

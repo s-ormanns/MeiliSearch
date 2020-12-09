@@ -322,6 +322,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c0df63cb2955042487fad3aefd2c6e3ae7389ac5dc1beb28921de0b69f779d4"
+
+[[package]]
 name = "arc-swap"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -618,6 +624,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "colored"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4ffc801dacf156c5854b9df4f425a626539c3a6ef7893cc0c5084a23f0b6c59"
+dependencies = [
+ "atty",
+ "lazy_static",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "compact_arena"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -826,6 +843,12 @@ name = "deunicode"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80115a2dfde04491e181c2440a39e4be26e52d9ca4e92bed213f65b94e0b8db1"
+
+[[package]]
+name = "diff"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e25ea47919b1560c4e3b7fe0aaab9becf5b84a10325ddf7db0f0ba5e1026499"
 
 [[package]]
 name = "digest"
@@ -1438,6 +1461,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "k9"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3393d63089a4886eeabcfb3926abfa4d815eefa6fa9c4bb91558121801b8d2c1"
+dependencies = [
+ "anyhow",
+ "colored",
+ "diff",
+ "lazy_static",
+ "libc",
+ "proc-macro2",
+ "regex",
+ "syn",
+ "term_size",
+]
+
+[[package]]
 name = "kernel32-sys"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1656,6 +1696,7 @@ name = "meilisearch-schema"
 version = "0.17.0"
 dependencies = [
  "indexmap",
+ "k9",
  "meilisearch-error",
  "serde",
  "serde_json",
@@ -2770,6 +2811,16 @@ dependencies = [
  "rand 0.7.3",
  "redox_syscall",
  "remove_dir_all",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "term_size"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e4129646ca0ed8f45d09b929036bafad5377103edd06e50bf574b353d2b08d9"
+dependencies = [
+ "libc",
  "winapi 0.3.9",
 ]
 
