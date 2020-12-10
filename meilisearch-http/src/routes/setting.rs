@@ -527,7 +527,7 @@ fn get_indexed_attributes(schema: &Schema) -> Vec<String> {
         ["*"].iter().map(|s| s.to_string()).collect()
     } else {
         schema
-            .searchable_attributes_str()
+            .searchable_names()
             .iter()
             .map(|s| s.to_string())
             .collect()

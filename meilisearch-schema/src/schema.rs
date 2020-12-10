@@ -1,10 +1,10 @@
-use std::collections::{BTreeSet, HashSet};
 use std::borrow::Cow;
+use std::collections::{BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, FieldId, FieldsMap, IndexedPos, SResult};
 use crate::position_map::PositionMap;
+use crate::{Error, FieldId, FieldsMap, IndexedPos, SResult};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct Schema {
@@ -83,8 +83,11 @@ impl Schema {
         &self.ranked
     }
 
-    fn displayed(&self) -> Cow<HashSet<FieldId>> {
-        todo!()
+    fn displayed(&self) -> Cow<BTreeSet<FieldId>> {
+        match &self.displayed {
+            Some(displayed) => Cow::Borrowed(displayed),
+            None => Cow::Owned(self.indexed_position.field_pos().map(|(f, _)| f).collect()),
+        }
     }
 
     pub fn is_displayed_all(&self) -> bool {
@@ -98,15 +101,15 @@ impl Schema {
             .collect()
     }
 
-    fn searchable_attributes(&self) -> Cow<[FieldId]> {
+    fn searchable(&self) -> Cow<[FieldId]> {
         match &self.searchable {
             Some(searchable) => Cow::Borrowed(&searchable),
             None => Cow::Owned(self.indexed_position.field_pos().map(|(f, _)| f).collect()),
         }
     }
 
-    pub fn searchable_attributes_str(&self) -> Vec<&str> {
-        self.searchable_attributes()
+    pub fn searchable_names(&self) -> Vec<&str> {
+        self.searchable()
             .iter()
             .filter_map(|a| self.name(*a))
             .collect()
@@ -159,7 +162,7 @@ impl Schema {
     pub fn update_displayed<S: AsRef<str>>(
         &mut self,
         data: impl IntoIterator<Item = S>,
-    )  -> SResult<()> {
+    ) -> SResult<()> {
         let mut displayed = BTreeSet::new();
         for name in data {
             let id = self.fields_map.insert(name.as_ref())?;
@@ -180,11 +183,11 @@ impl Schema {
         Ok(())
     }
 
-    pub fn set_all_fields_as_indexed(&mut self) {
+    pub fn set_all_searchable(&mut self) {
         self.searchable.take();
     }
 
-    pub fn set_all_fields_as_displayed(&mut self) {
+    pub fn set_all_displayed(&mut self) {
         self.displayed.take();
     }
 }
@@ -276,5 +279,99 @@ mod test {
             format!("{:?}", schema.indexed_position),
             r##"PositionMap { pos_to_field: [FieldId(1), FieldId(0)], field_to_pos: {FieldId(0): IndexedPos(1), FieldId(1): IndexedPos(0)} }"##
         );
+    }
+
+    #[test]
+    fn test_update_displayed() {
+        let mut schema = Schema::default();
+        schema.update_displayed(vec!["foobar"]).unwrap();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.displayed),
+            r##"Some({FieldId(0)})"##
+        );
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.indexed_position),
+            r##"PositionMap { pos_to_field: [], field_to_pos: {} }"##
+        );
+    }
+
+    #[test]
+    fn test_is_searchable_all() {
+        let mut schema = Schema::default();
+        assert!(schema.is_searchable_all());
+        schema.update_searchable(vec!["foo"]).unwrap();
+        assert!(!schema.is_searchable_all());
+    }
+
+    #[test]
+    fn test_is_displayed_all() {
+        let mut schema = Schema::default();
+        assert!(schema.is_displayed_all());
+        schema.update_displayed(vec!["foo"]).unwrap();
+        assert!(!schema.is_displayed_all());
+    }
+
+    #[test]
+    fn test_searchable_names() {
+        let mut schema = Schema::default();
+        assert_matches_inline_snapshot!(format!("{:?}", schema.searchable_names()), r##"[]"##);
+        schema.insert_with_position("foo").unwrap();
+        schema.insert_with_position("bar").unwrap();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.searchable_names()),
+            r##"["foo", "bar"]"##
+        );
+        schema.update_searchable(vec!["hello", "world"]).unwrap();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.searchable_names()),
+            r##"["hello", "world"]"##
+        );
+        schema.set_all_searchable();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.searchable_names()),
+            r##"["hello", "world", "foo", "bar"]"##
+        );
+    }
+
+    #[test]
+    fn test_displayed_names() {
+        let mut schema = Schema::default();
+        assert_matches_inline_snapshot!(format!("{:?}", schema.displayed_names()), r##"{}"##);
+        schema.insert_with_position("foo").unwrap();
+        schema.insert_with_position("bar").unwrap();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.displayed_names()),
+            r##"{"foo", "bar"}"##
+        );
+        schema.update_displayed(vec!["hello", "world"]).unwrap();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.displayed_names()),
+            r##"{"world", "hello"}"##
+        );
+        schema.set_all_displayed();
+        assert_matches_inline_snapshot!(
+            format!("{:?}", schema.displayed_names()),
+            r##"{"foo", "bar"}"##
+        );
+    }
+
+    #[test]
+    fn test_set_all_searchable() {
+        let mut schema = Schema::default();
+        assert!(schema.is_searchable_all());
+        schema.update_searchable(vec!["foobar"]).unwrap();
+        assert!(!schema.is_searchable_all());
+        schema.set_all_searchable();
+        assert!(schema.is_searchable_all());
+    }
+
+    #[test]
+    fn test_set_all_displayed() {
+        let mut schema = Schema::default();
+        assert!(schema.is_displayed_all());
+        schema.update_displayed(vec!["foobar"]).unwrap();
+        assert!(!schema.is_displayed_all());
+        schema.set_all_displayed();
+        assert!(schema.is_displayed_all());
     }
 }
