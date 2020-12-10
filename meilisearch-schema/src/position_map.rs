@@ -10,21 +10,29 @@ pub struct PositionMap {
 }
 
 impl PositionMap {
-    /// Inserts `id` at `pos`. If a value was present, returns `Some(id)`.
-    /// panics if pos > self.len()
-    pub fn insert(&mut self, id: FieldId, pos: IndexedPos) -> Option<FieldId> {
-        let upos = pos.0 as usize;
-        assert!(upos <= self.len());
-        if upos != self.len() {
-            let old = self.pos_to_field[upos];
-            self.pos_to_field[upos] = id;
-            self.field_to_pos.remove(&old);
-            self.field_to_pos.insert(id, pos);
-            Some(old)
+    pub fn insert(&mut self, id: FieldId, pos: IndexedPos) {
+        let mut upos = pos.0 as usize;
+        if let Some(old_pos) = self.field_to_pos.get(&id) {
+            let uold_pos = old_pos.0 as usize;
+            self.pos_to_field.remove(uold_pos);
+            if uold_pos < upos {
+                upos += 1;
+            }
+        }
+
+        if upos < self.len() {
+            self.pos_to_field.insert(upos, id);
         } else {
             self.push(id);
-            None
-        }
+        };
+
+        self.field_to_pos.clear();
+        self.field_to_pos.extend(
+            self.pos_to_field
+                .iter()
+                .enumerate()
+                .map(|(p, f)| (*f, IndexedPos(p as u16))),
+        );
     }
 
     /// Pushes `id` in last position
@@ -71,15 +79,22 @@ mod test {
     #[test]
     fn test_insert() {
         let mut map = PositionMap::default();
-        assert_eq!(map.insert(0.into(), 0.into()), None);
+        // changing position removes from old position
+        map.insert(0.into(), 0.into());
+        map.insert(1.into(), 1.into());
         assert_matches_inline_snapshot!(
             format!("{:?}", map),
-            r##"PositionMap { pos_to_field: [FieldId(0)], field_to_pos: {FieldId(0): IndexedPos(0)} }"##
+            r##"PositionMap { pos_to_field: [FieldId(0), FieldId(1)], field_to_pos: {FieldId(0): IndexedPos(0), FieldId(1): IndexedPos(1)} }"##
         );
-        assert_eq!(map.insert(1.into(), 0.into()), Some(0.into()));
+        map.insert(0.into(), 1.into());
         assert_matches_inline_snapshot!(
             format!("{:?}", map),
-            r##"PositionMap { pos_to_field: [FieldId(1)], field_to_pos: {FieldId(1): IndexedPos(0)} }"##
+            r##"PositionMap { pos_to_field: [FieldId(1), FieldId(0)], field_to_pos: {FieldId(0): IndexedPos(1), FieldId(1): IndexedPos(0)} }"##
+        );
+        map.insert(2.into(), 1.into());
+        assert_matches_inline_snapshot!(
+            format!("{:?}", map),
+            r##"PositionMap { pos_to_field: [FieldId(1), FieldId(2), FieldId(0)], field_to_pos: {FieldId(0): IndexedPos(2), FieldId(1): IndexedPos(0), FieldId(2): IndexedPos(1)} }"##
         );
     }
 
@@ -93,13 +108,6 @@ mod test {
             format!("{:?}", map),
             r##"PositionMap { pos_to_field: [FieldId(0), FieldId(2)], field_to_pos: {FieldId(0): IndexedPos(0), FieldId(2): IndexedPos(1)} }"##
         );
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_insert_out_of_bounds() {
-        let mut map = PositionMap::default();
-        map.insert(0.into(), 2.into());
     }
 
     #[test]
